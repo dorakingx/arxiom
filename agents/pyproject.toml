@@ -1,0 +1,14 @@
+[project]
+name = "arxiom-agents"
+version = "0.1.0"
+description = "AI agents for the arXiom problem-solving protocol"
+requires-python = ">=3.11"
+dependencies = [
+    "web3>=6.0",
+    "python-dotenv>=1.0",
+    "requests>=2.31",
+]
+
+[project.scripts]
+arxiom-master = "master_agent.agent:main"
+arxiom-sub-agent = "sub_agents.base:main"

@@ -1,0 +1,14 @@
+.DS_Store
+node_modules
+.env
+artifacts
+cache
+typechain-types
+coverage
+coverage.json
+
+agents/.env
+agents/__pycache__
+agents/**/__pycache__
+agents/.venv
+.venv
