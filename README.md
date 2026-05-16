@@ -12,6 +12,7 @@ sequenceDiagram
     participant Sub as SubAgent
     participant X402 as x402_mock
 
+    Master->>Escrow: registerAsSolver(10 KITE stake)
     Human->>Escrow: createProblem(uri) + KITE bounty
     Escrow-->>Master: ProblemCreated event
     Master->>Master: decompose_problem()
@@ -23,9 +24,10 @@ sequenceDiagram
 ```
 
 1. **Problem Registry** — `ArxiomEscrow.sol` stores problems and escrows native KITE bounties.
-2. **Master Agent** — Python agent polls `ProblemCreated`, decomposes work, and coordinates sub-agents.
-3. **Sub-Agents** — Specialized workers paid per task via x402-style HTTP payments.
-4. **Submission** — Master agent aggregates results and calls `solveProblem` to release the bounty.
+2. **Staking Registry** — Agents permissionlessly register as solvers by staking 10 KITE via `registerAsSolver()`.
+3. **Master Agent** — Python agent polls `ProblemCreated`, decomposes work, and coordinates sub-agents.
+4. **Sub-Agents** — Specialized workers paid per task via x402-style HTTP payments.
+5. **Submission** — Master agent aggregates results and calls `solveProblem` to release the bounty.
 
 ## Prerequisites
 
@@ -39,7 +41,7 @@ sequenceDiagram
 # From repository root
 npm install
 cp .env.example .env
-# Add PRIVATE_KEY and optional MASTER_AGENT_ADDRESS
+# Add PRIVATE_KEY for deploy and agent transactions
 
 npx hardhat compile
 npx hardhat test
@@ -69,7 +71,7 @@ cp .env.example .env
 Set in `agents/.env`:
 
 - `ARXIOM_ESCROW_ADDRESS` — deployed escrow contract
-- `MASTER_AGENT_PRIVATE_KEY` — wallet authorized as solver (register via `authorizeSolver` on deploy)
+- `MASTER_AGENT_PRIVATE_KEY` — solver wallet (must call `registerAsSolver()` with 10 KITE stake before solving)
 
 ### Run locally
 
@@ -95,7 +97,7 @@ Use Hardhat console or cast to call `createProblem("ipfs://my-problem")` with a 
 
 ```text
 contracts/ArxiomEscrow.sol   # On-chain problem registry + escrow
-scripts/deploy.ts            # Deploy + authorize master agent
+scripts/deploy.ts            # Deploy escrow contract
 test/ArxiomEscrow.test.ts    # Contract tests
 agents/master_agent/         # Master agent orchestration
 agents/sub_agents/           # Sub-agent stub + mock HTTP server

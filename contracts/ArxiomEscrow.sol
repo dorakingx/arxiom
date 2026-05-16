@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title ArxiomEscrow
-/// @notice Registers scientific/computational problems with native KITE bounties and releases escrow to authorized AI solvers.
-contract ArxiomEscrow is Ownable, ReentrancyGuard {
+/// @notice Registers scientific/computational problems with native KITE bounties and releases escrow to staked AI solvers.
+contract ArxiomEscrow is ReentrancyGuard {
     struct Problem {
         uint256 id;
         address creator;
@@ -17,9 +16,11 @@ contract ArxiomEscrow is Ownable, ReentrancyGuard {
         string solutionURI;
     }
 
+    uint256 public constant STAKE_REQUIREMENT = 10 ether;
+
     uint256 public nextProblemId;
     mapping(uint256 => Problem) public problems;
-    mapping(address => bool) public authorizedSolvers;
+    mapping(address => uint256) public solverStakes;
 
     event ProblemCreated(
         uint256 indexed problemId,
@@ -34,23 +35,58 @@ contract ArxiomEscrow is Ownable, ReentrancyGuard {
         string solutionURI
     );
 
-    event SolverAuthorized(address indexed solver);
-    event SolverRevoked(address indexed solver);
+    event SolverRegistered(address indexed solver, uint256 amount);
+    event SolverWithdrawn(address indexed solver, uint256 amount);
 
     error ZeroBounty();
     error ProblemNotFound();
     error ProblemAlreadyResolved();
     error NotAuthorizedSolver();
     error TransferFailed();
+    error IncorrectStakeAmount();
+    error AlreadyRegistered();
+    error NotRegistered();
 
     modifier onlyAuthorizedSolver() {
-        if (!authorizedSolvers[msg.sender]) {
+        if (solverStakes[msg.sender] < STAKE_REQUIREMENT) {
             revert NotAuthorizedSolver();
         }
         _;
     }
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    /// @notice Stake native KITE to register as an authorized solver.
+    function registerAsSolver() external payable {
+        if (msg.value != STAKE_REQUIREMENT) {
+            revert IncorrectStakeAmount();
+        }
+        if (solverStakes[msg.sender] != 0) {
+            revert AlreadyRegistered();
+        }
+
+        solverStakes[msg.sender] = msg.value;
+        emit SolverRegistered(msg.sender, msg.value);
+    }
+
+    /// @notice Withdraw staked KITE and unregister as a solver.
+    function withdrawStake() external nonReentrant {
+        uint256 stake = solverStakes[msg.sender];
+        if (stake < STAKE_REQUIREMENT) {
+            revert NotRegistered();
+        }
+
+        solverStakes[msg.sender] = 0;
+        emit SolverWithdrawn(msg.sender, stake);
+
+        (bool success, ) = payable(msg.sender).call{value: stake}("");
+        if (!success) {
+            revert TransferFailed();
+        }
+    }
+
+    /// @notice Returns whether an account has staked enough to act as a solver.
+    function isAuthorizedSolver(address account) external view returns (bool) {
+        return solverStakes[account] >= STAKE_REQUIREMENT;
+    }
 
     /// @notice Register a new problem and lock a native KITE bounty.
     function createProblem(
@@ -74,7 +110,7 @@ contract ArxiomEscrow is Ownable, ReentrancyGuard {
         emit ProblemCreated(problemId, msg.sender, descriptionURI, msg.value);
     }
 
-    /// @notice Submit a solution and release the bounty to the calling authorized solver.
+    /// @notice Submit a solution and release the bounty to the calling staked solver.
     function solveProblem(
         uint256 problemId,
         string calldata solutionURI
@@ -98,18 +134,6 @@ contract ArxiomEscrow is Ownable, ReentrancyGuard {
         if (!success) {
             revert TransferFailed();
         }
-    }
-
-    /// @notice Register an AI agent wallet allowed to call solveProblem.
-    function authorizeSolver(address solver) external onlyOwner {
-        authorizedSolvers[solver] = true;
-        emit SolverAuthorized(solver);
-    }
-
-    /// @notice Revoke solver permissions for an agent wallet.
-    function revokeSolver(address solver) external onlyOwner {
-        authorizedSolvers[solver] = false;
-        emit SolverRevoked(solver);
     }
 
     /// @notice Read a problem by id.

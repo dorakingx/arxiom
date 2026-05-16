@@ -5,7 +5,6 @@ import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("ArxiomEscrow", function () {
   let escrow: ArxiomEscrow;
-  let owner: HardhatEthersSigner;
   let creator: HardhatEthersSigner;
   let solver: HardhatEthersSigner;
   let stranger: HardhatEthersSigner;
@@ -13,15 +12,71 @@ describe("ArxiomEscrow", function () {
   const bounty = ethers.parseEther("1.0");
   const descriptionURI = "ipfs://problem-spec";
   const solutionURI = "ipfs://aggregated-solution";
+  let stakeRequirement: bigint;
 
   beforeEach(async function () {
-    [owner, creator, solver, stranger] = await ethers.getSigners();
+    [, creator, solver, stranger] = await ethers.getSigners();
 
     const Escrow = await ethers.getContractFactory("ArxiomEscrow");
-    escrow = await Escrow.deploy(owner.address);
+    escrow = await Escrow.deploy();
     await escrow.waitForDeployment();
 
-    await escrow.connect(owner).authorizeSolver(solver.address);
+    stakeRequirement = await escrow.STAKE_REQUIREMENT();
+    await escrow.connect(solver).registerAsSolver({ value: stakeRequirement });
+  });
+
+  it("registers a solver with the required stake", async function () {
+    const freshEscrow = await (await ethers.getContractFactory("ArxiomEscrow")).deploy();
+    await freshEscrow.waitForDeployment();
+
+    await expect(
+      freshEscrow.connect(stranger).registerAsSolver({ value: stakeRequirement })
+    )
+      .to.emit(freshEscrow, "SolverRegistered")
+      .withArgs(stranger.address, stakeRequirement);
+
+    expect(await freshEscrow.solverStakes(stranger.address)).to.equal(stakeRequirement);
+    expect(await freshEscrow.isAuthorizedSolver(stranger.address)).to.equal(true);
+  });
+
+  it("rejects incorrect stake amounts", async function () {
+    const freshEscrow = await (await ethers.getContractFactory("ArxiomEscrow")).deploy();
+    await freshEscrow.waitForDeployment();
+
+    await expect(
+      freshEscrow.connect(stranger).registerAsSolver({
+        value: stakeRequirement - 1n,
+      })
+    ).to.be.revertedWithCustomError(freshEscrow, "IncorrectStakeAmount");
+  });
+
+  it("rejects double registration", async function () {
+    await expect(
+      escrow.connect(solver).registerAsSolver({ value: stakeRequirement })
+    ).to.be.revertedWithCustomError(escrow, "AlreadyRegistered");
+  });
+
+  it("withdraws stake and allows re-registration", async function () {
+    const balanceBefore = await ethers.provider.getBalance(solver.address);
+
+    const tx = await escrow.connect(solver).withdrawStake();
+    const receipt = await tx.wait();
+    const gasUsed = receipt!.gasUsed * receipt!.gasPrice;
+
+    const balanceAfter = await ethers.provider.getBalance(solver.address);
+    expect(balanceAfter - balanceBefore + gasUsed).to.equal(stakeRequirement);
+    expect(await escrow.solverStakes(solver.address)).to.equal(0n);
+
+    await expect(escrow.connect(solver).registerAsSolver({ value: stakeRequirement }))
+      .to.emit(escrow, "SolverRegistered")
+      .withArgs(solver.address, stakeRequirement);
+  });
+
+  it("rejects withdraw without stake", async function () {
+    await expect(escrow.connect(stranger).withdrawStake()).to.be.revertedWithCustomError(
+      escrow,
+      "NotRegistered"
+    );
   });
 
   it("creates a problem with a native bounty", async function () {
@@ -52,7 +107,7 @@ describe("ArxiomEscrow", function () {
     ).to.be.revertedWithCustomError(escrow, "NotAuthorizedSolver");
   });
 
-  it("releases bounty to an authorized solver", async function () {
+  it("releases bounty to a staked solver", async function () {
     await escrow.connect(creator).createProblem(descriptionURI, { value: bounty });
 
     const balanceBefore = await ethers.provider.getBalance(solver.address);

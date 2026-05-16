@@ -5,22 +5,21 @@ async function main() {
   console.log("Deploying with account:", deployer.address);
 
   const Escrow = await ethers.getContractFactory("ArxiomEscrow");
-  const escrow = await Escrow.deploy(deployer.address);
+  const escrow = await Escrow.deploy();
   await escrow.waitForDeployment();
 
   const address = await escrow.getAddress();
-  console.log("ArxiomEscrow deployed to:", address);
+  const stakeRequirement = await escrow.STAKE_REQUIREMENT();
 
-  const masterAgentAddress = process.env.MASTER_AGENT_ADDRESS;
-  if (masterAgentAddress) {
-    const tx = await escrow.authorizeSolver(masterAgentAddress);
-    await tx.wait();
-    console.log("Authorized master agent solver:", masterAgentAddress);
-  } else {
-    console.log(
-      "Set MASTER_AGENT_ADDRESS in .env to authorize the master agent after deploy."
-    );
-  }
+  console.log("ArxiomEscrow deployed to:", address);
+  console.log(
+    "Solver stake requirement:",
+    ethers.formatEther(stakeRequirement),
+    "KITE"
+  );
+  console.log(
+    "Agents must call registerAsSolver() with the exact stake amount before solving problems."
+  );
 }
 
 main().catch((error) => {
