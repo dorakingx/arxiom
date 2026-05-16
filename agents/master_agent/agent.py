@@ -84,6 +84,7 @@ class MasterAgent:
                     "task_id": task["task_id"],
                     "description": task["description"],
                 },
+                private_key=self.config.master_private_key,
             )
             results.append(result)
         return results

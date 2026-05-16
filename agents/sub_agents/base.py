@@ -1,15 +1,20 @@
 """
-Sub-agent stub with a mock x402-compatible HTTP endpoint.
+Sub-agent stub with an x402-compatible HTTP endpoint and ECDSA payment verification.
 """
 
 from __future__ import annotations
 
 import json
+import secrets
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlparse
 
-from shared.x402_mock import PAYMENT_HEADER
+from shared.x402_mock import (
+    PAYMENT_SENDER_HEADER,
+    PAYMENT_SIGNATURE_HEADER,
+    verify_payment_authorization,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8402
@@ -30,6 +35,7 @@ class SubAgent:
 
 class SubAgentRequestHandler(BaseHTTPRequestHandler):
     sub_agent = SubAgent()
+    pending_payments: ClassVar[dict[str, dict[str, str]]] = {}
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -41,14 +47,31 @@ class SubAgentRequestHandler(BaseHTTPRequestHandler):
             return
 
         query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+        task_id = query.get("task_id", "task-0")
         payload = {
-            "task_id": query.get("task_id", "task-0"),
+            "task_id": task_id,
             "description": query.get("description", "unspecified task"),
         }
 
-        if PAYMENT_HEADER not in self.headers:
-            self._send_payment_required()
+        sender = self.headers.get(PAYMENT_SENDER_HEADER)
+        signature = self.headers.get(PAYMENT_SIGNATURE_HEADER)
+
+        if not sender or not signature:
+            self._send_payment_required(task_id)
             return
+
+        pending = self.pending_payments.get(task_id)
+        if pending is None:
+            self._send_payment_required(task_id)
+            return
+
+        if not verify_payment_authorization(
+            sender, signature, pending["nonce"], pending["amount"]
+        ):
+            self._send_error_response(402, {"error": "invalid_payment_signature"})
+            return
+
+        del self.pending_payments[task_id]
 
         result = self.sub_agent.handle_task(payload)
         body = json.dumps(result).encode("utf-8")
@@ -58,15 +81,28 @@ class SubAgentRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_payment_required(self) -> None:
+    def _send_payment_required(self, task_id: str) -> None:
+        nonce = secrets.token_hex(16)
+        amount = "0.001"
+        self.pending_payments[task_id] = {"nonce": nonce, "amount": amount}
+
         payment_instructions = {
-            "amount": "0.001",
+            "amount": amount,
+            "nonce": nonce,
             "recipient": "0xSubAgentWallet000000000000000000000000",
             "token": "KITE",
             "network": "kite-testnet",
         }
         body = json.dumps(payment_instructions).encode("utf-8")
         self.send_response(402)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_error_response(self, status: int, payload: dict[str, Any]) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
