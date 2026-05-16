@@ -17,16 +17,21 @@ class AgentConfig:
     master_private_key: str
     sub_agent_url: str
     poll_interval_seconds: int
+    openai_api_key: str
+    openai_model: str
 
 
 def load_config() -> AgentConfig:
     escrow_address = os.getenv("ARXIOM_ESCROW_ADDRESS", "")
     master_private_key = os.getenv("MASTER_AGENT_PRIVATE_KEY", "")
+    openai_api_key = os.getenv("OPENAI_API_KEY", "")
 
     if not escrow_address:
         raise ValueError("ARXIOM_ESCROW_ADDRESS is required")
     if not master_private_key:
         raise ValueError("MASTER_AGENT_PRIVATE_KEY is required")
+    if not openai_api_key:
+        raise ValueError("OPENAI_API_KEY is required")
 
     return AgentConfig(
         rpc_url=os.getenv("KITE_RPC_URL", "https://rpc-testnet.gokite.ai/"),
@@ -35,4 +40,6 @@ def load_config() -> AgentConfig:
         master_private_key=master_private_key,
         sub_agent_url=os.getenv("SUB_AGENT_URL", "http://127.0.0.1:8402/task"),
         poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "5")),
+        openai_api_key=openai_api_key,
+        openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
     )

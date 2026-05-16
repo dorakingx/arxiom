@@ -72,6 +72,7 @@ Set in `agents/.env`:
 
 - `ARXIOM_ESCROW_ADDRESS` — deployed escrow contract
 - `MASTER_AGENT_PRIVATE_KEY` — solver wallet (must call `registerAsSolver()` with 10 KITE stake before solving)
+- `OPENAI_API_KEY` — for LLM-powered problem decomposition (`OPENAI_MODEL` optional, default `gpt-4o-mini`)
 
 ### Run locally
 

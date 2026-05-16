@@ -20,6 +20,7 @@ if str(AGENTS_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENTS_ROOT))
 
 from master_agent.config import AgentConfig, load_config
+from master_agent.problem_decomposer import decompose_problem as llm_decompose_problem
 from shared.abi import load_arxiom_escrow_abi
 from shared.x402_mock import pay_and_fetch
 
@@ -69,21 +70,8 @@ class MasterAgent:
         return new_problems
 
     def decompose_problem(self, problem: dict[str, Any]) -> list[dict[str, Any]]:
-        """Stub decomposition into sub-tasks for specialized sub-agents."""
-        problem_id = problem["problem_id"]
-        description_uri = problem["description_uri"]
-        return [
-            {
-                "task_id": f"{problem_id}-gather",
-                "description": f"Gather data for {description_uri}",
-                "sub_agent_url": self.config.sub_agent_url,
-            },
-            {
-                "task_id": f"{problem_id}-verify",
-                "description": f"Verify solution candidate for {description_uri}",
-                "sub_agent_url": self.config.sub_agent_url,
-            },
-        ]
+        """Decompose a problem into sub-tasks via LLM (with stub fallback on failure)."""
+        return llm_decompose_problem(problem, self.config)
 
     def dispatch_sub_agents(self, tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Trigger mock x402 micro-payments and collect sub-agent outputs."""
