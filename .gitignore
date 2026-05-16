@@ -12,3 +12,7 @@ agents/__pycache__
 agents/**/__pycache__
 agents/.venv
 .venv
+
+frontend/node_modules
+frontend/.next
+frontend/.env.local

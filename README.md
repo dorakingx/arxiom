@@ -31,7 +31,7 @@ sequenceDiagram
 
 ## Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+ and npm (frontend uses Next.js 14; Node 20.9+ recommended for latest Next)
 - Python 3.11+
 - A funded Kite testnet wallet ([faucet](https://faucet.gokite.ai))
 
@@ -48,7 +48,7 @@ npx hardhat test
 npx hardhat run scripts/deploy.ts --network kiteTestnet
 ```
 
-Copy the deployed contract address into `agents/.env` as `ARXIOM_ESCROW_ADDRESS`.
+Copy the deployed contract address into `agents/.env` and `frontend/.env.local` as `ARXIOM_ESCROW_ADDRESS` / `NEXT_PUBLIC_ESCROW_ADDRESS`.
 
 ### Kite testnet
 
@@ -93,9 +93,29 @@ cd agents
 python -m master_agent.agent
 ```
 
-**Terminal 3 — create a test problem (after deploy):**
+**Terminal 3 — frontend (human problem registry):**
 
-Use Hardhat console or cast to call `createProblem("ipfs://my-problem")` with a KITE bounty.
+```bash
+cd frontend
+cp .env.example .env.local
+# Set NEXT_PUBLIC_ESCROW_ADDRESS to your deployed ArxiomEscrow address
+
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Connect MetaMask on Kite testnet (chain ID 2368), register a problem with a KITE bounty, then watch **Latest Problems** update when agents solve it.
+
+### MetaMask — Kite testnet
+
+| Field | Value |
+|-------|-------|
+| Network name | KiteAI Testnet |
+| RPC URL | `https://rpc-testnet.gokite.ai/` |
+| Chain ID | `2368` |
+| Currency | KITE |
+
+Fund your wallet via the [Kite faucet](https://faucet.gokite.ai).
 
 ## Project layout
 
@@ -106,6 +126,7 @@ test/ArxiomEscrow.test.ts    # Contract tests
 agents/master_agent/         # Master agent orchestration
 agents/sub_agents/           # FastAPI x402 seller (server.py) + legacy stub (base.py)
 agents/shared/               # ABI loader + x402 mock client
+frontend/                    # Next.js Web3 UI (wagmi + viem)
 ```
 
 ## Hackathon next steps
@@ -113,7 +134,6 @@ agents/shared/               # ABI loader + x402 mock client
 - Replace `x402_mock.py` with a real x402 facilitator ([docs](https://docs.x402.org/introduction))
 - Integrate [OpenClaw](https://pypi.org/project/openclaw-sdk/) for multi-agent orchestration
 - ERC20 bounty support and IPFS upload helpers
-- Frontend for problem creation and solution browsing
 
 ## License
 
