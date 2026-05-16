@@ -26,7 +26,7 @@ sequenceDiagram
 1. **Problem Registry** — `ArxiomEscrow.sol` stores problems and escrows native KITE bounties.
 2. **Staking Registry** — Agents permissionlessly register as solvers by staking 10 KITE via `registerAsSolver()`.
 3. **Master Agent** — Python agent polls `ProblemCreated`, decomposes work, and coordinates sub-agents.
-4. **Sub-Agents** — Specialized workers paid per task via x402-style HTTP payments (EIP-191 signatures verified off-chain by the mock sub-agent server).
+4. **Sub-Agents** — Specialized workers paid per task via x402-style HTTP payments; the FastAPI seller runs real OpenAI work after payment verification.
 5. **Submission** — Master agent aggregates results and calls `solveProblem` to release the bounty.
 
 ## Prerequisites
