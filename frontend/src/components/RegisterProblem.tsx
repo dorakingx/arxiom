@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { parseEther } from "viem";
+import { toast } from "sonner";
 import {
   useAccount,
   useWaitForTransactionReceipt,
@@ -15,6 +16,16 @@ import {
 } from "@/lib/contract";
 import { kiteTestnet } from "@/lib/wagmi";
 
+function getTxErrorMessage(error: Error): string {
+  if (
+    error.name === "UserRejectedRequestError" ||
+    /rejected/i.test(error.message)
+  ) {
+    return "Transaction rejected in wallet";
+  }
+  return error.message.split("\n")[0] || "Transaction failed";
+}
+
 export function RegisterProblem() {
   const { isConnected } = useAccount();
   const [descriptionURI, setDescriptionURI] = useState("");
@@ -25,13 +36,51 @@ export function RegisterProblem() {
     hash: txHash,
   });
 
+  const toastIdRef = useRef<string | number | undefined>(undefined);
   const escrowConfigured = Boolean(process.env.NEXT_PUBLIC_ESCROW_ADDRESS);
+
+  useEffect(() => {
+    if (isPending) {
+      toastIdRef.current = toast.loading("Confirm in your wallet...");
+    }
+  }, [isPending]);
+
+  useEffect(() => {
+    if (isConfirming && toastIdRef.current !== undefined) {
+      toast.loading("Confirming on Kite testnet...", { id: toastIdRef.current });
+    }
+  }, [isConfirming]);
+
+  useEffect(() => {
+    if (isSuccess && txHash) {
+      toast.success("Problem registered!", {
+        id: toastIdRef.current,
+        description: "Your bounty is escrowed and agents can pick up the task.",
+        action: {
+          label: "View on Kitescan",
+          onClick: () => window.open(getExplorerTxUrl(txHash), "_blank"),
+        },
+      });
+      setDescriptionURI("");
+      setBountyAmount("0.01");
+      reset();
+      toastIdRef.current = undefined;
+    }
+  }, [isSuccess, txHash, reset]);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(getTxErrorMessage(error), { id: toastIdRef.current });
+      toastIdRef.current = undefined;
+    }
+  }, [error]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!descriptionURI.trim() || !bountyAmount) return;
 
     reset();
+    toastIdRef.current = toast.loading("Preparing transaction...");
     writeContract({
       address: getEscrowAddress(),
       abi: arxiomEscrowAbi,
@@ -99,26 +148,6 @@ export function RegisterProblem() {
 
       {!isConnected && escrowConfigured && (
         <p className="mt-3 text-sm text-zinc-500">Connect your wallet to register a problem.</p>
-      )}
-
-      {error && (
-        <p className="mt-3 text-sm text-red-400">
-          {error.message.split("\n")[0]}
-        </p>
-      )}
-
-      {isSuccess && txHash && (
-        <p className="mt-3 text-sm text-emerald-400">
-          Problem registered.{" "}
-          <a
-            href={getExplorerTxUrl(txHash)}
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
-            View on Kitescan
-          </a>
-        </p>
       )}
     </section>
   );
