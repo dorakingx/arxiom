@@ -76,12 +76,15 @@ Set in `agents/.env`:
 
 ### Run locally
 
-**Terminal 1 — mock sub-agent (x402 seller):**
+**Terminal 1 — FastAPI sub-agent (x402 seller):**
 
 ```bash
 cd agents
-python -m sub_agents.base
+python -m sub_agents.server
+# or: uvicorn sub_agents.server:app --host 127.0.0.1 --port 8402
 ```
+
+Legacy `python -m sub_agents.base` (stdlib HTTP server) is also available for quick tests.
 
 **Terminal 2 — master agent:**
 
@@ -101,7 +104,7 @@ contracts/ArxiomEscrow.sol   # On-chain problem registry + escrow
 scripts/deploy.ts            # Deploy escrow contract
 test/ArxiomEscrow.test.ts    # Contract tests
 agents/master_agent/         # Master agent orchestration
-agents/sub_agents/           # Sub-agent stub + mock HTTP server
+agents/sub_agents/           # FastAPI x402 seller (server.py) + legacy stub (base.py)
 agents/shared/               # ABI loader + x402 mock client
 ```
 

@@ -8,8 +8,11 @@ dependencies = [
     "python-dotenv>=1.0",
     "requests>=2.31",
     "openai>=1.40",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
 ]
 
 [project.scripts]
 arxiom-master = "master_agent.agent:main"
 arxiom-sub-agent = "sub_agents.base:main"
+arxiom-sub-server = "sub_agents.server:main"
