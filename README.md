@@ -40,7 +40,7 @@ flowchart LR
 
     subgraph Agents["Agentic Economy"]
         MA[Master Agent]
-        LLM1[OpenAI Decomposer]
+        LLM1[Groq Decomposer]
         X402[x402 ECDSA Buyer]
         SA1[Sub-Agent A]
         SA2[Sub-Agent B]
@@ -68,7 +68,7 @@ sequenceDiagram
     participant Frontend as Next.js UI
     participant Escrow as ArxiomEscrow
     participant Master as Master Agent
-    participant OpenAI as OpenAI LLM
+    participant Groq as Groq LLM
     participant X402 as x402 ECDSA Client
     participant Sub as Sub-Agent (FastAPI)
 
@@ -79,8 +79,8 @@ sequenceDiagram
     Frontend->>Escrow: createProblem(descriptionURI) payable
     Escrow-->>Master: ProblemCreated
 
-    Master->>OpenAI: Decompose problem into sub-tasks
-    OpenAI-->>Master: Task plan + sub-agent URLs
+    Master->>Groq: Decompose problem into sub-tasks
+    Groq-->>Master: Task plan + sub-agent URLs
 
     loop Each sub-task
         Master->>Sub: GET /task (no payment)
@@ -88,8 +88,8 @@ sequenceDiagram
         Master->>X402: EIP-191 sign x402-payment:nonce:amount
         Master->>Sub: Retry with X-PAYMENT-SENDER + SIGNATURE
         Sub->>Sub: ecrecover verify
-        Sub->>OpenAI: Execute specialized work
-        OpenAI-->>Sub: Sub-task result
+        Sub->>Groq: Execute specialized work
+        Groq-->>Sub: Sub-task result
         Sub-->>Master: 200 JSON result
     end
 
@@ -105,7 +105,7 @@ sequenceDiagram
 1. **`ArxiomEscrow.sol`** — Problem registry, native KITE escrow, permissionless **solver staking** (`registerAsSolver`), bounty release on `solveProblem`.
 2. **Next.js frontend** — Human problem registration (wagmi + viem), live bounty board, Sonner toasts, expandable solution viewer.
 3. **Master Agent** (`agents/master_agent/`) — Polls `ProblemCreated`, LLM decomposition, x402 buyer, on-chain submission.
-4. **Sub-Agent server** (`agents/sub_agents/server.py`) — FastAPI **x402 seller**: 402 challenge, ECDSA verification, OpenAI worker after payment.
+4. **Sub-Agent server** (`agents/sub_agents/server.py`) — FastAPI **x402 seller**: 402 challenge, ECDSA verification, Groq worker after payment.
 5. **x402 mock client** (`agents/shared/x402_mock.py`) — Production-shaped M2M flow; swap facilitator `/verify` + `/settle` on Kite for mainnet-grade x402.
 
 ---
@@ -117,7 +117,7 @@ sequenceDiagram
 | **Blockchain** | [Kite AI EVM](https://gokite.ai/) testnet (Chain ID **2368**, native **KITE**) |
 | **Smart contracts** | Solidity 0.8.20, OpenZeppelin, **Hardhat 2.28**, TypeScript tests |
 | **Agent payments** | [x402](https://docs.x402.org/introduction) pattern — HTTP 402, **EIP-191 `personal_sign`**, off-chain ECDSA verification |
-| **AI** | **OpenAI** (`gpt-4o-mini` default) — Master decomposition + Sub-Agent task execution |
+| **AI** | **[Groq](https://console.groq.com)** (free tier, OpenAI-compatible) — `llama-3.3-70b-versatile` default — Master decomposition + Sub-Agent execution |
 | **Agents runtime** | Python 3.11+, Web3.py, FastAPI, Uvicorn |
 | **Frontend** | **Next.js 14**, React 18, Tailwind CSS 4, **wagmi v2**, viem, Sonner |
 
@@ -151,7 +151,7 @@ sequenceDiagram
 - Funded Kite testnet wallet(s):
   - **Human wallet** — pay bounties via `createProblem`
   - **Master Agent wallet** — `registerAsSolver()` with **0.1 KITE** stake, then gas for `solveProblem`
-- **OpenAI API key** — shared by Master Agent and Sub-Agent server
+- **Groq API key** (free at [console.groq.com](https://console.groq.com)) — shared by Master Agent and Sub-Agent server
 
 ---
 
@@ -230,19 +230,19 @@ cp .env.example .env
 ```env
 ARXIOM_ESCROW_ADDRESS=0xYourDeployedEscrow
 MASTER_AGENT_PRIVATE_KEY=0xYourSolverWalletKey
-OPENAI_API_KEY=sk-...
+GROQ_API_KEY=gsk_...
 KITE_RPC_URL=https://rpc-testnet.gokite.ai/
 KITE_CHAIN_ID=2368
 SUB_AGENT_URL=http://127.0.0.1:8402/task
 POLL_INTERVAL_SECONDS=5
-OPENAI_MODEL=gpt-4o-mini
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 ### Step 4 — Boot the stack (3 terminals + browser)
 
 Run these in **separate terminals** from the repo root.
 
-**Terminal 1 — Sub-Agent (x402 seller + OpenAI worker)**
+**Terminal 1 — Sub-Agent (x402 seller + Groq worker)**
 
 ```bash
 cd agents
@@ -291,7 +291,7 @@ Open **[http://localhost:3000](http://localhost:3000)**.
 3. Master retries with headers:
    - `X-PAYMENT-SENDER`
    - `X-PAYMENT-SIGNATURE`
-4. Sub-Agent **ecrecover**-verifies the signature, then runs the paid OpenAI task.
+4. Sub-Agent **ecrecover**-verifies the signature, then runs the paid Groq task.
 
 This demonstrates **agentic commerce without traditional payment rails**—aligned with the hackathon’s Agentic Commerce / Trading track.
 
@@ -320,7 +320,8 @@ arxiom/
 | `PRIVATE_KEY` | root `.env` | Deploy contracts |
 | `ARXIOM_ESCROW_ADDRESS` | `agents/.env` | Agent contract target |
 | `MASTER_AGENT_PRIVATE_KEY` | `agents/.env` | Solver + x402 signer |
-| `OPENAI_API_KEY` | `agents/.env` | LLM decomposition & sub-tasks |
+| `GROQ_API_KEY` | `agents/.env` | LLM decomposition & sub-tasks ([free key](https://console.groq.com)) |
+| `GROQ_MODEL` | `agents/.env` | e.g. `llama-3.3-70b-versatile` or `llama-3.1-8b-instant` |
 | `SUB_AGENT_URL` | `agents/.env` | Default `http://127.0.0.1:8402/task` |
 | `NEXT_PUBLIC_ESCROW_ADDRESS` | `frontend/.env.local` | UI contract address |
 | `NEXT_PUBLIC_RPC_URL` | `frontend/.env.local` | Kite RPC for wagmi |

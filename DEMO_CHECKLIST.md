@@ -1,6 +1,6 @@
 # arXiom — Final Demo Recording Checklist
 
-Use this script **before** you hit Record. All `.env` files (root, `agents/`, `frontend/`) should already be configured with your deployed `ArxiomEscrow` address, keys, and OpenAI API key. **Do not edit `.env` on camera.**
+Use this script **before** you hit Record. All `.env` files (root, `agents/`, `frontend/`) should already be configured with your deployed `ArxiomEscrow` address, keys, and **Groq API key** ([free at console.groq.com](https://console.groq.com)). **Do not edit `.env` on camera.**
 
 **Network:** Kite AI Testnet · Chain ID **2368** · RPC `https://rpc-testnet.gokite.ai/`
 
@@ -37,7 +37,7 @@ cast send $ARXIOM_ESCROW_ADDRESS "registerAsSolver()" \
 
 ### Config sanity (offline, 30 seconds)
 
-- [ ] `agents/.env` — `OPENAI_API_KEY`, `SUB_AGENT_URL=http://127.0.0.1:8402/task`
+- [ ] `agents/.env` — `GROQ_API_KEY`, `GROQ_MODEL=llama-3.3-70b-versatile`, `SUB_AGENT_URL=http://127.0.0.1:8402/task`
 - [ ] `frontend/.env` — `NEXT_PUBLIC_ESCROW_ADDRESS` matches the same escrow as agents
 - [ ] Sub-agent and master agent venv exists: `agents/.venv` (run `pip install -r requirements.txt` once if needed)
 
@@ -153,7 +153,7 @@ cls
 ### D. Watch the agent pipeline (terminals)
 
 1. **Terminal 2 (Master):** `ProblemCreated` → LLM decomposition → x402 payments → `solveProblem` tx.
-2. **Terminal 1 (Sub-Agent):** HTTP `402` → paid request → specialist role logs / OpenAI work.
+2. **Terminal 1 (Sub-Agent):** HTTP `402` → paid request → specialist role logs / Groq LLM work.
 3. Point out **x402 ECDSA** micropayments between agents (no card rails).
 
 ### E. Reveal the result (UI)
@@ -174,7 +174,7 @@ cls
 |-------|-----|
 | MetaMask tx stuck | Clear Activity tab; ensure nonce isn’t blocked |
 | Master never solves | Confirm 0.1 KITE stake + `ARXIOM_ESCROW_ADDRESS` in `agents/.env` |
-| Sub-agent 503 | `OPENAI_API_KEY` in `agents/.env`; restart Terminal 1 |
+| Sub-agent 503 | `GROQ_API_KEY` in `agents/.env` ([console.groq.com](https://console.groq.com)); restart Terminal 1 |
 | UI not updating | Wait 12s (silent poll) or click **Refresh** |
 | Wrong network | Switch MetaMask to Kite testnet `2368` |
 

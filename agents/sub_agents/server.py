@@ -3,7 +3,7 @@ FastAPI sub-agent server — x402 seller and task worker.
 
 Enforces the HTTP 402 Payment Required flow: issues a nonce challenge, verifies
 EIP-191 ECDSA payment authorization from the Master Agent, then executes paid work
-via an OpenAI-powered Sub-Agent Worker.
+via a Groq-powered Sub-Agent Worker (OpenAI-compatible API).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from openai import APIError, APITimeoutError, OpenAI
 
+from shared.groq_client import create_groq_client
 from shared.x402_mock import (
     PAYMENT_SENDER_HEADER,
     PAYMENT_SIGNATURE_HEADER,
@@ -32,8 +33,8 @@ load_dotenv(AGENTS_ROOT.parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 MAX_DESCRIPTION_CHARS = 8_000
 DEFAULT_ROLE = "General AI Worker"
 
@@ -44,7 +45,7 @@ PAYMENT_AMOUNT = "1000"
 app = FastAPI(title="arXiom Sub-Agent")
 pending_payments: dict[str, dict[str, str]] = {}
 
-_openai_client: OpenAI | None = None
+_groq_client: OpenAI | None = None
 
 
 def build_system_prompt(role: str) -> str:
@@ -61,13 +62,13 @@ def format_result_with_role(role: str, content: str) -> str:
     return f"**[Executed by {role}]**\n\n{content}"
 
 
-def get_openai_client() -> OpenAI:
-    global _openai_client
-    if not OPENAI_API_KEY:
-        raise HTTPException(status_code=503, detail="openai_not_configured")
-    if _openai_client is None:
-        _openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    return _openai_client
+def get_groq_client() -> OpenAI:
+    global _groq_client
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="groq_not_configured")
+    if _groq_client is None:
+        _groq_client = create_groq_client(GROQ_API_KEY)
+    return _groq_client
 
 
 def _fallback_result(task_id: str, description: str, reason: str, role: str) -> str:
@@ -82,7 +83,7 @@ def _fallback_result(task_id: str, description: str, reason: str, role: str) -> 
 
 def execute_task(task_id: str, description: str, role: str = DEFAULT_ROLE) -> str:
     """
-    Run specialized sub-agent work via OpenAI after x402 payment verification.
+    Run specialized sub-agent work via Groq after x402 payment verification.
 
     Returns LLM output on success, or a graceful fallback string if the API fails
     (keeps HTTP 200 so the Master Agent pipeline can continue).
@@ -92,12 +93,12 @@ def execute_task(task_id: str, description: str, role: str = DEFAULT_ROLE) -> st
         return _fallback_result(task_id, description, "empty task description", role)
 
     text = text[:MAX_DESCRIPTION_CHARS]
-    client = get_openai_client()
+    client = get_groq_client()
     system_prompt = build_system_prompt(role)
 
     try:
         response = client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -113,7 +114,7 @@ def execute_task(task_id: str, description: str, role: str = DEFAULT_ROLE) -> st
         )
         content = (response.choices[0].message.content or "").strip()
         if not content:
-            logger.warning("OpenAI returned empty content for task %s (%s)", task_id, role)
+            logger.warning("Groq returned empty content for task %s (%s)", task_id, role)
             return _fallback_result(task_id, description, "empty LLM response", role)
         logger.info(
             "Sub-agent completed task %s as '%s' (%d chars)",
@@ -125,7 +126,7 @@ def execute_task(task_id: str, description: str, role: str = DEFAULT_ROLE) -> st
     except HTTPException:
         raise
     except (APIError, APITimeoutError) as exc:
-        logger.error("OpenAI API error for task %s (%s): %s", task_id, role, exc)
+        logger.error("Groq API error for task %s (%s): %s", task_id, role, exc)
         return _fallback_result(task_id, description, str(exc), role)
     except Exception as exc:
         logger.exception("Unexpected error for task %s (%s)", task_id, role)

@@ -10,10 +10,11 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 import requests
-from openai import APIError, APITimeoutError, OpenAI
+from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
 from master_agent.config import AgentConfig
+from shared.groq_client import create_groq_client
 
 logger = logging.getLogger(__name__)
 
@@ -141,27 +142,31 @@ def decompose_with_llm(
     api_key: str,
     model: str,
 ) -> list[SubTaskSpec]:
-    client = OpenAI(api_key=api_key)
+    client = create_groq_client(api_key)
     user_prompt = (
         f"Problem ID: {problem_id}\n\n"
         f"Problem statement:\n{problem_text}\n\n"
         "Decompose into sub-agent tasks. Each task object MUST include "
-        '"task_id", "description", and "role" (professional specialist title).'
+        '"task_id", "description", and "role" (professional specialist title).\n\n'
+        'Return JSON only: {"tasks": [{"task_id": "...", "description": "...", '
+        '"role": "..."}]}'
     )
 
-    completion = client.beta.chat.completions.parse(
+    completion = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        response_format=ProblemDecomposition,
+        response_format={"type": "json_object"},
+        temperature=0.3,
     )
 
-    parsed = completion.choices[0].message.parsed
-    if parsed is None:
-        raise ValueError("LLM returned no parsed decomposition")
+    raw = (completion.choices[0].message.content or "").strip()
+    if not raw:
+        raise ValueError("Groq returned empty decomposition")
 
+    parsed = ProblemDecomposition.model_validate_json(raw)
     return _validate_tasks(parsed.tasks, problem_id)
 
 
@@ -233,8 +238,8 @@ def decompose_problem(problem: dict[str, Any], config: AgentConfig) -> list[dict
         specs = decompose_with_llm(
             problem_text,
             problem_id,
-            api_key=config.openai_api_key,
-            model=config.openai_model,
+            api_key=config.groq_api_key,
+            model=config.groq_model,
         )
         tasks = _to_dispatch_tasks(specs, config.sub_agent_url)
         logger.info(
@@ -245,7 +250,7 @@ def decompose_problem(problem: dict[str, Any], config: AgentConfig) -> list[dict
         )
         return tasks
     except (APIError, APITimeoutError) as exc:
-        logger.error("OpenAI API error decomposing problem %s: %s", problem_id, exc)
+        logger.error("Groq API error decomposing problem %s: %s", problem_id, exc)
     except Exception as exc:
         logger.warning("LLM decomposition failed for problem %s: %s", problem_id, exc)
 
