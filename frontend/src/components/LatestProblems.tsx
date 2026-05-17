@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatEther } from "viem";
 import type { Address } from "viem";
 import { usePublicClient, useWatchContractEvent } from "wagmi";
@@ -15,175 +15,11 @@ import {
   sortProblems,
   type ProblemRow,
 } from "@/lib/problems";
+import { SolutionMarkdown } from "@/components/SolutionMarkdown";
 import { resolveSolutionDisplay } from "@/lib/solutionDisplay";
 import { kiteTestnet } from "@/lib/wagmi";
 
 const LOG_BLOCK_RANGE = 50_000n;
-
-function formatInlineMarkdown(text: string): ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-semibold text-zinc-100">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={i}
-          className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-xs text-indigo-200"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
-  });
-}
-
-function SolutionMarkdown({ content }: { content: string }) {
-  const lines = content.split("\n");
-  const nodes: ReactNode[] = [];
-  let listItems: string[] = [];
-  let tableRows: string[][] = [];
-  let inTable = false;
-
-  const flushList = () => {
-    if (listItems.length === 0) return;
-    nodes.push(
-      <ul key={`ul-${nodes.length}`} className="my-2 list-disc space-y-1 pl-5 text-sm text-zinc-300">
-        {listItems.map((item, i) => (
-          <li key={i}>{formatInlineMarkdown(item)}</li>
-        ))}
-      </ul>,
-    );
-    listItems = [];
-  };
-
-  const flushTable = () => {
-    if (tableRows.length < 2) {
-      tableRows = [];
-      inTable = false;
-      return;
-    }
-    const [header, ...body] = tableRows;
-    nodes.push(
-      <div
-        key={`table-${nodes.length}`}
-        className="my-3 overflow-x-auto rounded-lg border border-zinc-700/80"
-      >
-        <table className="w-full min-w-[280px] text-left text-xs">
-          <thead className="bg-zinc-800/80 text-zinc-200">
-            <tr>
-              {header.map((cell, i) => (
-                <th key={i} className="px-3 py-2 font-medium">
-                  {cell.trim()}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800 text-zinc-400">
-            {body.map((row, ri) => (
-              <tr key={ri} className="bg-zinc-900/40">
-                {row.map((cell, ci) => (
-                  <td key={ci} className="px-3 py-2">
-                    {formatInlineMarkdown(cell.trim())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>,
-    );
-    tableRows = [];
-    inTable = false;
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      flushList();
-      inTable = true;
-      tableRows.push(
-        trimmed
-          .slice(1, -1)
-          .split("|")
-          .map((c) => c.trim()),
-      );
-      continue;
-    }
-
-    if (inTable && !trimmed.startsWith("|")) {
-      if (tableRows.length === 2 && tableRows[1].every((c) => /^[-:]+$/.test(c))) {
-        tableRows.splice(1, 1);
-      } else {
-        flushTable();
-      }
-    }
-
-    if (trimmed.startsWith("- ")) {
-      listItems.push(trimmed.slice(2));
-      continue;
-    }
-
-    flushList();
-
-    if (trimmed.startsWith("## ")) {
-      nodes.push(
-        <h3
-          key={`h2-${nodes.length}`}
-          className="mt-4 border-b border-zinc-800 pb-1 text-base font-semibold text-white first:mt-0"
-        >
-          {formatInlineMarkdown(trimmed.slice(3))}
-        </h3>,
-      );
-      continue;
-    }
-
-    if (trimmed.startsWith("### ")) {
-      nodes.push(
-        <h4 key={`h3-${nodes.length}`} className="mt-3 text-sm font-semibold text-indigo-200">
-          {formatInlineMarkdown(trimmed.slice(4))}
-        </h4>,
-      );
-      continue;
-    }
-
-    if (trimmed === "---") {
-      nodes.push(<hr key={`hr-${nodes.length}`} className="my-4 border-zinc-800" />);
-      continue;
-    }
-
-    if (trimmed.startsWith("*") && trimmed.endsWith("*") && !trimmed.startsWith("**")) {
-      nodes.push(
-        <p key={`em-${nodes.length}`} className="mt-3 text-xs italic text-zinc-500">
-          {formatInlineMarkdown(trimmed.slice(1, -1))}
-        </p>,
-      );
-      continue;
-    }
-
-    if (trimmed === "") {
-      continue;
-    }
-
-    nodes.push(
-      <p key={`p-${nodes.length}`} className="mt-2 text-sm leading-relaxed text-zinc-300">
-        {formatInlineMarkdown(trimmed)}
-      </p>,
-    );
-  }
-
-  flushList();
-  if (inTable) flushTable();
-
-  return <div className="solution-markdown">{nodes}</div>;
-}
 
 function ProblemCard({
   problem,

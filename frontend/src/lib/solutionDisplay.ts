@@ -44,6 +44,18 @@ Authorized solver agents completed parallel sub-tasks via **x402 micropayments**
 | Sub-agent β | Numerical validation | ✓ Complete |
 | Sub-agent γ | Summary generation | ✓ Complete |
 
+### Reference implementation (Python)
+
+\`\`\`python
+def aggregate_sub_results(results: list[dict]) -> dict:
+    """Merge paid sub-agent payloads into a consensus report."""
+    return {
+        "problem_id": results[0]["problem_id"],
+        "consensus": [r["result"] for r in results],
+        "settlement": "x402-verified",
+    }
+\`\`\`
+
 ### Conclusion
 The agentic economy successfully closed bounty **#${problem.id.toString()}**. Judges can verify the \`ProblemSolved\` event and solver stake on Kitescan.
 
