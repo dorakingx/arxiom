@@ -20,6 +20,8 @@ import { resolveSolutionDisplay } from "@/lib/solutionDisplay";
 import { kiteTestnet } from "@/lib/wagmi";
 
 const LOG_BLOCK_RANGE = 50_000n;
+/** Silent HTTP polling when testnet WebSocket subscriptions drop during live demos. */
+const POLL_INTERVAL_MS = 12_000;
 
 function ProblemCard({
   problem,
@@ -186,67 +188,87 @@ export function LatestProblems() {
     });
   };
 
-  const loadHistorical = useCallback(async () => {
-    if (!publicClient || !escrowAddress) {
-      setLoading(false);
-      return;
-    }
+  const loadHistorical = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
 
-    try {
-      setLoadError(null);
-      const latestBlock = await publicClient.getBlockNumber();
-      const fromBlock =
-        latestBlock > LOG_BLOCK_RANGE ? latestBlock - LOG_BLOCK_RANGE : 0n;
-
-      const [createdLogs, solvedLogs] = await Promise.all([
-        publicClient.getContractEvents({
-          address: escrowAddress,
-          abi: arxiomEscrowAbi,
-          eventName: "ProblemCreated",
-          fromBlock,
-          toBlock: "latest",
-        }),
-        publicClient.getContractEvents({
-          address: escrowAddress,
-          abi: arxiomEscrowAbi,
-          eventName: "ProblemSolved",
-          fromBlock,
-          toBlock: "latest",
-        }),
-      ]);
-
-      let map = new Map<string, ProblemRow>();
-
-      for (const log of createdLogs) {
-        map = mergeProblemCreated(
-          map,
-          log.args.problemId!,
-          log.args.creator!,
-          log.args.descriptionURI!,
-          log.args.bountyAmount!,
-        );
+      if (!publicClient || !escrowAddress) {
+        if (!silent) setLoading(false);
+        return;
       }
 
-      for (const log of solvedLogs) {
-        map = mergeProblemSolved(
-          map,
-          log.args.problemId!,
-          log.args.solver!,
-          log.args.solutionURI!,
-        );
-      }
+      try {
+        if (!silent) setLoadError(null);
 
-      setProblems(map);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load problems");
-    } finally {
-      setLoading(false);
-    }
-  }, [publicClient, escrowAddress]);
+        const latestBlock = await publicClient.getBlockNumber();
+        const fromBlock =
+          latestBlock > LOG_BLOCK_RANGE ? latestBlock - LOG_BLOCK_RANGE : 0n;
+
+        const [createdLogs, solvedLogs] = await Promise.all([
+          publicClient.getContractEvents({
+            address: escrowAddress,
+            abi: arxiomEscrowAbi,
+            eventName: "ProblemCreated",
+            fromBlock,
+            toBlock: "latest",
+          }),
+          publicClient.getContractEvents({
+            address: escrowAddress,
+            abi: arxiomEscrowAbi,
+            eventName: "ProblemSolved",
+            fromBlock,
+            toBlock: "latest",
+          }),
+        ]);
+
+        let map = new Map<string, ProblemRow>();
+
+        for (const log of createdLogs) {
+          map = mergeProblemCreated(
+            map,
+            log.args.problemId!,
+            log.args.creator!,
+            log.args.descriptionURI!,
+            log.args.bountyAmount!,
+          );
+        }
+
+        for (const log of solvedLogs) {
+          map = mergeProblemSolved(
+            map,
+            log.args.problemId!,
+            log.args.solver!,
+            log.args.solutionURI!,
+          );
+        }
+
+        setProblems(map);
+      } catch (err) {
+        if (!silent) {
+          setLoadError(
+            err instanceof Error ? err.message : "Failed to load problems",
+          );
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [publicClient, escrowAddress],
+  );
 
   useEffect(() => {
-    loadHistorical();
+    void loadHistorical();
   }, [loadHistorical]);
+
+  useEffect(() => {
+    if (!publicClient || !escrowAddress) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadHistorical({ silent: true });
+    }, POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [publicClient, escrowAddress, loadHistorical]);
 
   useWatchContractEvent({
     address: escrowAddress,
@@ -308,7 +330,7 @@ export function LatestProblems() {
           type="button"
           onClick={() => {
             setLoading(true);
-            loadHistorical();
+            void loadHistorical();
           }}
           className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
         >
