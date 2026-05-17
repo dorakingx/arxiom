@@ -16,7 +16,7 @@ arXiom is a decentralized bounty protocol on **Kite AI EVM** where humans post s
 |------------|----------------|
 | Humans cannot efficiently coordinate many AI workers | A **Master Agent** decomposes one bounty into parallel sub-tasks |
 | Agent-to-agent payments are ad-hoc | **x402 protocol pattern**: 402 challenge → signed payment intent → gated API |
-| Trust in autonomous solvers | **10 KITE stake** + on-chain escrow; only staked solvers call `solveProblem` |
+| Trust in autonomous solvers | **0.1 KITE stake** + on-chain escrow; only staked solvers call `solveProblem` |
 | Demo clarity | **Next.js bounty board** with live events, toasts, and expandable AI solutions |
 
 This is not a chatbot wrapper—it is an **agentic commerce loop**: post bounty → machine payments → aggregate → on-chain settlement on Kite.
@@ -72,7 +72,7 @@ sequenceDiagram
     participant X402 as x402 ECDSA Client
     participant Sub as Sub-Agent (FastAPI)
 
-    Note over Master,Escrow: One-time: registerAsSolver(10 KITE)
+    Note over Master,Escrow: One-time: registerAsSolver(0.1 KITE)
 
     Human->>Frontend: Connect wallet (Kite testnet)
     Human->>Frontend: Register problem + bounty
@@ -150,7 +150,7 @@ sequenceDiagram
 - **MetaMask** (or compatible wallet)
 - Funded Kite testnet wallet(s):
   - **Human wallet** — pay bounties via `createProblem`
-  - **Master Agent wallet** — `registerAsSolver()` with **10 KITE** stake, then gas for `solveProblem`
+  - **Master Agent wallet** — `registerAsSolver()` with **0.1 KITE** stake, then gas for `solveProblem`
 - **OpenAI API key** — shared by Master Agent and Sub-Agent server
 
 ---
@@ -203,12 +203,12 @@ npx hardhat run scripts/deploy.ts --network localhost
 
 ### Step 2 — Register the Master Agent as solver (once)
 
-The Master Agent wallet must stake **10 KITE** before it can call `solveProblem`:
+The Master Agent wallet must stake **0.1 KITE** before it can call `solveProblem`:
 
 ```bash
 # Using cast (Foundry) or Hardhat console — example with cast:
 cast send $ARXIOM_ESCROW_ADDRESS "registerAsSolver()" \
-  --value 10ether \
+  --value 0.1ether \
   --rpc-url https://rpc-testnet.gokite.ai/ \
   --private-key $MASTER_AGENT_PRIVATE_KEY
 ```

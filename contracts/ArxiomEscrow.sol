@@ -16,7 +16,7 @@ contract ArxiomEscrow is ReentrancyGuard {
         string solutionURI;
     }
 
-    uint256 public constant STAKE_REQUIREMENT = 10 ether;
+    uint256 public constant STAKE_REQUIREMENT = 0.1 ether;
 
     uint256 public nextProblemId;
     mapping(uint256 => Problem) public problems;
