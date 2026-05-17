@@ -77,21 +77,31 @@ class MasterAgent:
         """Trigger mock x402 micro-payments and collect sub-agent outputs."""
         results: list[dict[str, Any]] = []
         for task in tasks:
-            role = task.get("role", "General AI Worker")
+            task_id = str(task["task_id"])
+            description = str(task["description"])
+            role = str(task.get("role") or "General AI Worker").strip() or "General AI Worker"
+            sub_agent_url = str(task["sub_agent_url"])
+
+            query_payload = {
+                "task_id": task_id,
+                "description": description,
+                "role": role,
+            }
+
             logger.info(
-                "Paying sub-agent for task %s (%s) via x402 mock",
-                task["task_id"],
+                "Dispatching marketplace specialist '%s' for task %s → %s",
                 role,
+                task_id,
+                sub_agent_url,
             )
+
             result = pay_and_fetch(
-                task["sub_agent_url"],
-                payload={
-                    "task_id": task["task_id"],
-                    "description": task["description"],
-                    "role": role,
-                },
+                sub_agent_url,
+                payload=query_payload,
                 private_key=self.config.master_private_key,
             )
+            result["task_id"] = task_id
+            result["role"] = role
             results.append(result)
         return results
 

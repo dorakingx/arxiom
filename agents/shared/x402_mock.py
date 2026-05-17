@@ -7,17 +7,24 @@ buyer (Master Agent) signs a deterministic payment intent message using EIP-191
 personal_sign. The seller (sub-agent) recovers the payer address via ECDSA and grants
 access—matching state-channel or off-chain micropayment verification patterns.
 
+Query parameters on GET (e.g. ``task_id``, ``description``, ``role``) are forwarded on
+both the initial 402 challenge and the paid retry so the Sub-Agent marketplace persona
+stays consistent across the handshake.
+
 Production deployments should replace this mock with a real x402 facilitator /verify
 and /settle endpoints on Kite AI.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import requests
 from eth_account import Account
 from eth_account.messages import encode_defunct
+
+logger = logging.getLogger(__name__)
 
 PAYMENT_SENDER_HEADER = "X-PAYMENT-SENDER"
 PAYMENT_SIGNATURE_HEADER = "X-PAYMENT-SIGNATURE"
@@ -63,6 +70,13 @@ def verify_payment_authorization(
     return recovered.lower() == sender.lower()
 
 
+def _normalize_query_params(payload: dict[str, Any] | None) -> dict[str, str]:
+    """Coerce payload values to strings for requests query params (incl. role)."""
+    if not payload:
+        return {}
+    return {key: str(value) for key, value in payload.items() if value is not None}
+
+
 def pay_and_fetch(
     url: str,
     payload: dict[str, Any] | None,
@@ -71,14 +85,28 @@ def pay_and_fetch(
     """
     Execute an x402 buyer flow with a cryptographically verifiable payment proof.
 
-    1. GET the resource -> 402 Payment Required (amount + nonce challenge)
+    1. GET the resource with ``params=payload`` -> 402 Payment Required (amount + nonce)
     2. Sign ``x402-payment:<nonce>:<amount>`` with the Master Agent private key
-    3. Retry GET with X-PAYMENT-SENDER and X-PAYMENT-SIGNATURE headers
+    3. Retry GET with the same ``params`` plus X-PAYMENT-SENDER / X-PAYMENT-SIGNATURE
     4. Return JSON body on 200 OK
+
+    Typical payload keys: ``task_id``, ``description``, ``role`` (FastAPI Query on /task).
 
     Raises RuntimeError on unexpected HTTP status; ValueError if 402 body is malformed.
     """
-    initial_response = requests.get(url, params=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+    query_params = _normalize_query_params(payload)
+
+    if query_params.get("role"):
+        logger.info(
+            "x402 payment flow → %s (task_id=%s, role=%s)",
+            url,
+            query_params.get("task_id"),
+            query_params.get("role"),
+        )
+
+    initial_response = requests.get(
+        url, params=query_params, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     if initial_response.status_code != 402:
         raise RuntimeError(
             f"Expected HTTP 402 from {url}, got {initial_response.status_code}"
@@ -96,7 +124,7 @@ def pay_and_fetch(
 
     paid_response = requests.get(
         url,
-        params=payload,
+        params=query_params,
         headers={
             PAYMENT_SENDER_HEADER: sender,
             PAYMENT_SIGNATURE_HEADER: signature,

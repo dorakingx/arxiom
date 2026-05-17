@@ -19,29 +19,51 @@ logger = logging.getLogger(__name__)
 
 MAX_PROBLEM_TEXT_CHARS = 12_000
 FETCH_TIMEOUT_SECONDS = 15
+DEFAULT_ROLE = "General AI Worker"
 
-SYSTEM_PROMPT = """You are a Master AI Agent Manager for a decentralized scientific problem-solving network.
+SYSTEM_PROMPT = """You are a Master AI Agent Manager for the arXiom decentralized scientific problem-solving network.
 
-Your job is to decompose a scientific or computational problem into discrete, actionable sub-tasks
-that specialized sub-agents can execute independently.
+Decompose each problem into 2-6 discrete sub-tasks that independent specialist sub-agents can execute and get paid for via the x402 marketplace.
+
+For EVERY sub-task you MUST assign a `role`: a specific, highly professional specialist title that would appear on an expert marketplace. Examples:
+- "Quantum Algorithm Engineer"
+- "Computational Data Scientist"
+- "Security Auditor"
+- "Numerical Simulation Specialist"
+- "Bioinformatics Pipeline Architect"
 
 Guidelines:
-- Produce 2-6 focused tasks with clear deliverables.
-- Each task must be self-contained and verifiable.
-- Prefer concrete data gathering, computation, analysis, and verification steps.
-- Use short snake_case task_id values without spaces (e.g. gather_data, run_simulation).
-- Assign each task a distinct specialist role title (e.g. "Computational Biologist", "Numerical Analyst", "Literature Review Agent") that a sub-agent marketplace would list.
+- Each task needs a unique role (no duplicates unless unavoidable).
+- Roles should match the sub-task domain; sound credible to hackathon judges.
+- Use short snake_case `task_id` values without spaces (e.g. design_algorithm, audit_contract).
+- Each `description` must be self-contained, actionable, and verifiable.
+- Prefer concrete data gathering, computation, analysis, modeling, and verification steps.
+
+Output JSON matching this schema per task:
+{
+  "task_id": "...",
+  "description": "...",
+  "role": "Quantum Algorithm Engineer"
+}
 """
 
 
 class SubTaskSpec(BaseModel):
-    task_id: str
-    description: str
-    role: str = Field(default="General AI Worker")
+    task_id: str = Field(description="Short snake_case identifier for the sub-task")
+    description: str = Field(
+        description="Clear, actionable work order for the specialist sub-agent"
+    )
+    role: str = Field(
+        description=(
+            'Professional marketplace specialist title, e.g. "Data Scientist" or '
+            '"Security Auditor"'
+        ),
+        min_length=3,
+    )
 
 
 class ProblemDecomposition(BaseModel):
-    tasks: list[SubTaskSpec] = Field(min_length=1)
+    tasks: list[SubTaskSpec] = Field(min_length=1, max_length=8)
 
 
 def fetch_problem_description(uri: str) -> str:
@@ -76,15 +98,28 @@ def _normalize_task_id(problem_id: int, task_id: str) -> str:
     return f"{prefix}{cleaned}"
 
 
+def _normalize_role(role: str | None) -> str:
+    cleaned = (role or DEFAULT_ROLE).strip()
+    return cleaned if cleaned else DEFAULT_ROLE
+
+
 def _validate_tasks(tasks: list[SubTaskSpec], problem_id: int) -> list[SubTaskSpec]:
     valid: list[SubTaskSpec] = []
+    seen_roles: set[str] = set()
+
     for task in tasks:
         task_id = task.task_id.strip()
         description = task.description.strip()
+        role = _normalize_role(task.role)
+
         if not task_id or not description:
             logger.warning("Skipping malformed sub-task: %s", task)
             continue
-        role = (task.role or "General AI Worker").strip() or "General AI Worker"
+
+        if role.lower() in seen_roles:
+            role = f"{role} (Task {len(valid) + 1})"
+        seen_roles.add(role.lower())
+
         valid.append(
             SubTaskSpec(
                 task_id=_normalize_task_id(problem_id, task_id),
@@ -110,7 +145,8 @@ def decompose_with_llm(
     user_prompt = (
         f"Problem ID: {problem_id}\n\n"
         f"Problem statement:\n{problem_text}\n\n"
-        "Decompose this into sub-agent tasks."
+        "Decompose into sub-agent tasks. Each task object MUST include "
+        '"task_id", "description", and "role" (professional specialist title).'
     )
 
     completion = client.beta.chat.completions.parse(
@@ -132,18 +168,24 @@ def decompose_with_llm(
 def stub_fallback_tasks(
     problem_id: int, description_uri: str, sub_agent_url: str
 ) -> list[dict[str, Any]]:
-    """Deterministic fallback when LLM or fetch fails."""
+    """Deterministic fallback when LLM or fetch fails — still uses distinct specialist roles."""
     return [
         {
-            "task_id": f"{problem_id}-gather",
-            "description": f"Gather data for {description_uri}",
-            "role": "Data Archivist",
+            "task_id": f"{problem_id}-literature_synthesis",
+            "description": f"Synthesize prior work and datasets relevant to: {description_uri}",
+            "role": "Computational Data Scientist",
             "sub_agent_url": sub_agent_url,
         },
         {
-            "task_id": f"{problem_id}-verify",
-            "description": f"Verify solution candidate for {description_uri}",
-            "role": "Verification Scientist",
+            "task_id": f"{problem_id}-algorithm_design",
+            "description": f"Propose algorithms and implementation plan for: {description_uri}",
+            "role": "Quantum Algorithm Engineer",
+            "sub_agent_url": sub_agent_url,
+        },
+        {
+            "task_id": f"{problem_id}-security_review",
+            "description": f"Audit assumptions, risks, and verification strategy for: {description_uri}",
+            "role": "Security Auditor",
             "sub_agent_url": sub_agent_url,
         },
     ]
@@ -166,7 +208,7 @@ def _to_dispatch_tasks(
 def decompose_problem(problem: dict[str, Any], config: AgentConfig) -> list[dict[str, Any]]:
     """
     Decompose a problem into sub-agent tasks using an LLM, with safe fallbacks.
-    Never raises — always returns a task list.
+    Never raises — always returns a task list with a `role` per task.
     """
     problem_id = int(problem["problem_id"])
     description_uri = str(problem["description_uri"])
@@ -196,10 +238,10 @@ def decompose_problem(problem: dict[str, Any], config: AgentConfig) -> list[dict
         )
         tasks = _to_dispatch_tasks(specs, config.sub_agent_url)
         logger.info(
-            "LLM decomposed problem %s into %d tasks: %s",
+            "LLM decomposed problem %s into %d marketplace tasks: %s",
             problem_id,
             len(tasks),
-            [t["task_id"] for t in tasks],
+            [(t["task_id"], t["role"]) for t in tasks],
         )
         return tasks
     except (APIError, APITimeoutError) as exc:
