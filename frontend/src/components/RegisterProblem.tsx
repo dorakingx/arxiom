@@ -13,6 +13,7 @@ import {
   arxiomEscrowAbi,
   getEscrowAddress,
   getExplorerTxUrl,
+  isEscrowConfigured,
 } from "@/lib/contract";
 import { kiteTestnet } from "@/lib/wagmi";
 
@@ -37,7 +38,7 @@ export function RegisterProblem() {
   });
 
   const toastIdRef = useRef<string | number | undefined>(undefined);
-  const escrowConfigured = Boolean(process.env.NEXT_PUBLIC_ESCROW_ADDRESS);
+  const escrowConfigured = isEscrowConfigured();
 
   useEffect(() => {
     if (isPending) {
@@ -101,7 +102,7 @@ export function RegisterProblem() {
       {!escrowConfigured && (
         <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           Set <code className="font-mono">NEXT_PUBLIC_ESCROW_ADDRESS</code> in{" "}
-          <code className="font-mono">.env.local</code>.
+          <code className="font-mono">frontend/.env</code> to your deployed contract.
         </p>
       )}
 

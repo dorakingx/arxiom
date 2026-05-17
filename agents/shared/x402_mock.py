@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 PAYMENT_SENDER_HEADER = "X-PAYMENT-SENDER"
 PAYMENT_SIGNATURE_HEADER = "X-PAYMENT-SIGNATURE"
 
-REQUEST_TIMEOUT_SECONDS = 10
+# Groq inference can take 20–60s per specialist task on the free tier.
+REQUEST_TIMEOUT_SECONDS = 90
 
 
 def build_payment_message(nonce: str, amount: str) -> str:

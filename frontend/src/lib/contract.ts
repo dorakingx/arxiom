@@ -1,14 +1,20 @@
-import type { Address } from "viem";
+import { isAddress, zeroAddress, type Address } from "viem";
 
 import { arxiomEscrowAbi } from "./arxiomEscrowAbi";
 import { kiteTestnet } from "./wagmi";
 
 export { arxiomEscrowAbi };
 
+export function isEscrowConfigured(): boolean {
+  const address = process.env.NEXT_PUBLIC_ESCROW_ADDRESS;
+  if (!address || !isAddress(address)) return false;
+  return address.toLowerCase() !== zeroAddress.toLowerCase();
+}
+
 export function getEscrowAddress(): Address {
   const address = process.env.NEXT_PUBLIC_ESCROW_ADDRESS;
-  if (!address) {
-    throw new Error("NEXT_PUBLIC_ESCROW_ADDRESS is not set");
+  if (!isEscrowConfigured()) {
+    throw new Error("NEXT_PUBLIC_ESCROW_ADDRESS is not set or invalid");
   }
   return address as Address;
 }

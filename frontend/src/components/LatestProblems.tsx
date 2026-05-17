@@ -7,6 +7,7 @@ import { usePublicClient, useWatchContractEvent } from "wagmi";
 
 import {
   arxiomEscrowAbi,
+  isEscrowConfigured,
   truncateAddress,
 } from "@/lib/contract";
 import {
@@ -177,7 +178,9 @@ export function LatestProblems() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const escrowAddress = process.env.NEXT_PUBLIC_ESCROW_ADDRESS as Address | undefined;
+  const escrowAddress = isEscrowConfigured()
+    ? (process.env.NEXT_PUBLIC_ESCROW_ADDRESS as Address)
+    : undefined;
 
   const toggleSolution = (id: string) => {
     setExpandedIds((prev) => {
