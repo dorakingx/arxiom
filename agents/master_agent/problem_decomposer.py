@@ -30,12 +30,14 @@ Guidelines:
 - Each task must be self-contained and verifiable.
 - Prefer concrete data gathering, computation, analysis, and verification steps.
 - Use short snake_case task_id values without spaces (e.g. gather_data, run_simulation).
+- Assign each task a distinct specialist role title (e.g. "Computational Biologist", "Numerical Analyst", "Literature Review Agent") that a sub-agent marketplace would list.
 """
 
 
 class SubTaskSpec(BaseModel):
     task_id: str
     description: str
+    role: str = Field(default="General AI Worker")
 
 
 class ProblemDecomposition(BaseModel):
@@ -82,10 +84,12 @@ def _validate_tasks(tasks: list[SubTaskSpec], problem_id: int) -> list[SubTaskSp
         if not task_id or not description:
             logger.warning("Skipping malformed sub-task: %s", task)
             continue
+        role = (task.role or "General AI Worker").strip() or "General AI Worker"
         valid.append(
             SubTaskSpec(
                 task_id=_normalize_task_id(problem_id, task_id),
                 description=description,
+                role=role,
             )
         )
 
@@ -133,11 +137,13 @@ def stub_fallback_tasks(
         {
             "task_id": f"{problem_id}-gather",
             "description": f"Gather data for {description_uri}",
+            "role": "Data Archivist",
             "sub_agent_url": sub_agent_url,
         },
         {
             "task_id": f"{problem_id}-verify",
             "description": f"Verify solution candidate for {description_uri}",
+            "role": "Verification Scientist",
             "sub_agent_url": sub_agent_url,
         },
     ]
@@ -150,6 +156,7 @@ def _to_dispatch_tasks(
         {
             "task_id": spec.task_id,
             "description": spec.description,
+            "role": spec.role,
             "sub_agent_url": sub_agent_url,
         }
         for spec in specs

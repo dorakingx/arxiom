@@ -77,12 +77,18 @@ class MasterAgent:
         """Trigger mock x402 micro-payments and collect sub-agent outputs."""
         results: list[dict[str, Any]] = []
         for task in tasks:
-            logger.info("Paying sub-agent for task %s via x402 mock", task["task_id"])
+            role = task.get("role", "General AI Worker")
+            logger.info(
+                "Paying sub-agent for task %s (%s) via x402 mock",
+                task["task_id"],
+                role,
+            )
             result = pay_and_fetch(
                 task["sub_agent_url"],
                 payload={
                     "task_id": task["task_id"],
                     "description": task["description"],
+                    "role": role,
                 },
                 private_key=self.config.master_private_key,
             )
@@ -93,13 +99,28 @@ class MasterAgent:
         self, problem_id: int, sub_results: list[dict[str, Any]]
     ) -> str:
         """Aggregate sub-agent outputs and submit the final solution on-chain."""
-        solution_uri = f"ipfs://solution-{problem_id}-{int(time.time())}"
+        sections: list[str] = [
+            "## Aggregated Multi-Agent Solution\n",
+            f"**Problem #{problem_id}** · {len(sub_results)} specialist sub-agents via x402\n",
+        ]
+        for entry in sub_results:
+            result_text = str(entry.get("result", "")).strip()
+            if result_text:
+                sections.append(result_text)
+
+        inline_markdown = "\n\n---\n\n".join(sections)
+        max_inline_chars = 6_000
+        if len(inline_markdown) <= max_inline_chars:
+            solution_uri = inline_markdown
+        else:
+            solution_uri = f"ipfs://solution-{problem_id}-{int(time.time())}"
+
         solution_payload = {
             "problem_id": problem_id,
-            "solution_uri": solution_uri,
+            "solution_uri": solution_uri[:200] + ("..." if len(solution_uri) > 200 else ""),
             "sub_results": sub_results,
         }
-        logger.info("Submitting solution: %s", json.dumps(solution_payload))
+        logger.info("Submitting solution: %s", json.dumps(solution_payload, default=str))
 
         nonce = self.web3.eth.get_transaction_count(self.account.address)
         tx = self.contract.functions.solveProblem(
