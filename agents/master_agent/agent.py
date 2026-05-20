@@ -14,6 +14,7 @@ from typing import Any
 from eth_account import Account
 from web3 import Web3
 from web3.contract import Contract
+from web3.middleware import ExtraDataToPOAMiddleware
 
 AGENTS_ROOT = Path(__file__).resolve().parents[1]
 if str(AGENTS_ROOT) not in sys.path:
@@ -36,6 +37,7 @@ class MasterAgent:
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
         self.web3 = Web3(Web3.HTTPProvider(config.rpc_url))
+        self.web3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
         if not self.web3.is_connected():
             raise ConnectionError(f"Unable to connect to RPC at {config.rpc_url}")
 
